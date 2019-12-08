@@ -11,19 +11,19 @@ Proof of work is a mechanisim to let the blockchain know the fact that a lot of 
 In the calculate Hash function , you include a terminate value to change the value of Hash to include the zeros in the beginning of the hash function till the difficulty mentioned.
 
 ```
-	calculateHash(index , timestamp , data , previousHash) 
-		return sha256(this.index + this.timestamp + this.previousHash + JSON.stringify(this.date) + this.terminate).toString();
+   calculateHash(index , timestamp , data , previousHash) 
+	return sha256(this.index + this.timestamp + this.previousHash + JSON.stringify(this.date) + this.terminate).toString();
 	
 ```
 
 The terminate value will control the while loop without it , the hash function doesn't change and mining of the block will enter an endless loop.
 
 ```
-	while(this.hash.substring(0,difficulty) !== Array(difficulty + 1).join('0') 
-	{
-		this.hash = this.calculateHash();
-		this.terminate++;
-	}
+   while(this.hash.substring(0,difficulty) !== Array(difficulty + 1).join('0') 
+   {
+	this.hash = this.calculateHash();
+	this.terminate++;
+   }
 ```
 
 ## Mining Rewards and Transactions 

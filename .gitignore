@@ -1,6 +1,7 @@
 # vim temporary files
-*~
-.*.swp
+
+.README.md.swp
+src/.main.js.swp
 .*.swo
 
 .vscode/

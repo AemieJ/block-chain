@@ -1,8 +1,7 @@
 # vim temporary files
 
-.README.md.swp
-src/.main.js.swp
+*~
+.*.swp
 .*.swo
 
-.vscode/
 node_modules/

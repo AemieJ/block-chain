@@ -1,1 +1,7 @@
-node_modules
+# vim temporary files
+*~
+*.swp
+*.swo
+
+.vscode/
+node_modules/

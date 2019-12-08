@@ -246,3 +246,10 @@ The final object including the transactions and mining rewards has the following
     "miningReward": 100
 }
 ```
+The fromAddress and toAddress will be replaced by the public Key that will be generated for each individual.
+
+## Signing Transactions
+
+Without any signing transactions , it is possible for any individual to spend any coin even the ones that doesn't belong to them. Hence , we provide a signature and make use of the public and the private key so that every transaction comes with a signature making transactions effective. 
+
+We generate the private key and public key using a known basic algorithm and for signing the transaction , we sign the hash of our transaction with our private key.However in the case of mining rewards, the miners don't have any signature however this transaction is consider a valid case.

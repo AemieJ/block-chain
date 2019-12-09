@@ -252,4 +252,46 @@ The fromAddress and toAddress will be replaced by the public Key that will be ge
 
 Without any signing transactions , it is possible for any individual to spend any coin even the ones that doesn't belong to them. Hence , we provide a signature and make use of the public and the private key so that every transaction comes with a signature making transactions effective. 
 
-We generate the private key and public key using a known basic algorithm and for signing the transaction , we sign the hash of our transaction with our private key.However in the case of mining rewards, the miners don't have any signature however this transaction is consider a valid case.
+The procedure for signing transaction is as follows:
+* First, we generate a private and public Key for that particular user/miner. 
+* We use the private key and extract our public key from it that will be the wallet address.
+* We create a transaction by sending our wallet address.
+* Signing the transaction is done by providing our private key and creating a hash for our signature that will be unique for each key.
+
+```
+signTransaction(signingKey) {
+		if(signingKey.getPublic('hex') !== this.fromAddress)
+			throw new Error("Transaction can't be performed using different wallet.");
+
+		const hashTrans = this.calculateHash();
+		const sign = signingKey.sign(hashTrans , 'base64');
+		this.signature = sign.toDER('hex'); //Export DER encoded signature in array
+}
+
+```
+* Then for the transaction to be valid we compare the hash of the public key with the signature and if this returns true transaction is complete and added to the block-chain , else not.
+
+```
+isValid() {
+		if(this.fromAddress === null && this.toAddress !== null) 
+			return true;
+		if(!this.signature || this.signature.length === 0)
+			throw new Error('No signature in this transaction');
+		
+		const publicKey = ec.keyFromPublic(this.fromAddress , 'hex');
+		return publicKey.verify(this.calculateHash() , this.signature);
+	
+}
+
+```
+
+### Aditional Notes
+
+* Run ```npm install``` to install all the required files for the project. 
+* To generate the keys , create a ```keyGen.json``` file in src/ and run ```node src/keygenerator```.
+* After this first initial step , run ```node src/main``` 
+
+
+
+ 
+

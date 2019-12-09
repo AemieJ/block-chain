@@ -306,6 +306,4 @@ function feedAndMultiply(uint _zombieId, uint _targetDna) public {
 }
 ```
 
-Note: For you Solidity whizzes, you may notice a problem with our code here! Don't worry, we'll fix this in the next chapter ;)
-
 

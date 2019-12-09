@@ -1,26 +1,28 @@
 const {Blockchain , Transaction} = require('./blockchain');
+const EC = require('elliptic').ec;
+const ec = new EC('secp256k1');
+const privateKey = require('./keyGen.json').privateKey;
+
+const myKey = ec.keyFromPrivate(privateKey);
+const myWalletAddress = myKey.getPublic('hex');
 
 let firstTry = new Blockchain();
-firstTry.createTransaction(new Transaction('address1' , 'address2' , 100));
-firstTry.createTransaction(new Transaction('address2' , 'address1' , 60));
+const tx1 = new Transaction(myWalletAddress , 'addr2' , 10);
+tx1.signTransaction(myKey);
+firstTry.addTransaction(tx1);
 
-firstTry.miningPendingTransactions('rewardAddr1');
-console.log("rewardAddr1: " + firstTry.getBalanceOfAddress('rewardAddr1') + " points reward\n");
+console.log('Miner inititated\n');
+firstTry.miningPendingTransactions(myWalletAddress);
 
-firstTry.miningPendingTransactions('rewardAddr2');
-console.log("rewardAddr2: " + firstTry.getBalanceOfAddress('rewardAddr2') + " points reward\n");
+const tx2 = new Transaction(myWalletAddress , 'addr1' , 30);
+tx2.signTransaction(myKey);
+firstTry.addTransaction(tx2);
 
-firstTry.createTransaction(new Transaction('address1' , 'address2' , 150));
-firstTry.createTransaction(new Transaction('address2' , 'address1' , 30));
-
-firstTry.miningPendingTransactions('rewardAddr1');
-console.log("rewardAddr1 " + firstTry.getBalanceOfAddress('rewardAddr1') + " points reward\n");
-
-firstTry.miningPendingTransactions('rewardAddr1');
-console.log("rewardAddr1 " + firstTry.getBalanceOfAddress('rewardAddr1') + " points reward\n");
-
-firstTry.miningPendingTransactions('rewardAddr2');
-console.log("Addr2 " + firstTry.getBalanceOfAddress('rewardAddr2') + " points reward\n");
+firstTry.miningPendingTransactions(myWalletAddress);
 
 
-console.log(JSON.stringify(firstTry  , null , 4));
+console.log('Balance\n');
+console.log(firstTry.getBalanceOfAddress(myWalletAddress));
+
+
+//console.log(JSON.stringify(firstTry  , null , 4));

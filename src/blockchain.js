@@ -14,7 +14,7 @@ class Transaction {
 	}
 
 	signTransaction(signingKey) {
-		if(signingKey.getPublic('hex') !== fromAddress)
+		if(signingKey.getPublic('hex') !== this.fromAddress)
 			throw new Error("Transaction can't be performed using different wallet.");
 
 		const hashTrans = this.calculateHash();
@@ -23,14 +23,14 @@ class Transaction {
 	}
 
 	isValid() {
-		if(this.fromAddress === null) 
+		if(this.fromAddress === null && this.toAddress !== null) 
 			return true;
 		if(!this.signature || this.signature.length === 0)
 			throw new Error('No signature in this transaction');
 		
-		const publicKey = ec.keyFromPublic(this.fromAddress);
-		publicKey.verify(this.calculateHash() , this.signature);
-			
+		const publicKey = ec.keyFromPublic(this.fromAddress , 'hex');
+		return publicKey.verify(this.calculateHash() , this.signature);
+	
 	}
 }
 
@@ -53,7 +53,16 @@ class Block {
 			this.hash = this.calculateHash();
 			this.terminate++;
 		}
-		console.log("HASH: " + this.hash + "\n");
+		console.log("Hash of the mining block: " + this.hash + "\n");
+	}
+	
+	hasValidTransaction() {
+		for(const tx of this.transactions) 
+		{
+			if(!tx.isValid())
+				return false;
+		}
+		return true;
 	}
 }
 
@@ -99,7 +108,13 @@ class Blockchain {
 		];
 	}
 
-	createTransaction(transaction) {
+	addTransaction(transaction) {
+		if(!transaction.fromAddress || !transaction.toAddress) 
+			throw new Error('Transaction requires to and from address');
+
+		if(!transaction.isValid()) 
+			throw new Error('Cannot add invalid transaction to the chain');
+
 		this.pendingTransactions.push(transaction);
 	}
 

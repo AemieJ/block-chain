@@ -429,7 +429,7 @@ function _createZombie(string memory _name , uint _dna) private {
 }
 ```
 
-Chapter 14: Web3.js
+## Chapter 14: Web3.js
 Our Solidity contract is complete! Now we need to write a javascript frontend that interacts with the contract.
 
 Ethereum has a Javascript library called Web3.js.
@@ -492,6 +492,45 @@ Give it a try!
 * Go ahead — type in your name to the box on the right, and see what kind of zombie you get!
 
 * Once you have a zombie you're happy with, go ahead and click "Next Chapter" below to save your zombie and complete lesson 1!
+
+## Final Code for level-1 
+> Code saved as contract.sol
+
+```
+pragma solidity >=0.5.0 <0.6.0;
+
+contract ZombieFactory {
+
+    event NewZombie(uint zombieId, string name, uint dna);
+
+    uint dnaDigits = 16;
+    uint dnaModulus = 10 ** dnaDigits;
+
+    struct Zombie {
+        string name;
+        uint dna;
+    }
+
+    Zombie[] public zombies;
+
+    function _createZombie(string memory _name, uint _dna) private {
+        uint id = zombies.push(Zombie(_name, _dna)) - 1;
+        emit NewZombie(id, _name, _dna);
+    }
+
+    function _generateRandomDna(string memory _str) private view returns (uint) {
+        uint rand = uint(keccak256(abi.encodePacked(_str)));
+        return rand % dnaModulus;
+    }
+
+    function createRandomZombie(string memory _name) public {
+        uint randDna = _generateRandomDna(_name);
+        _createZombie(_name, randDna);
+    }
+
+}
+
+```
 
 
 

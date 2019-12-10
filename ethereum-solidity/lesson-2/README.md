@@ -574,7 +574,6 @@ Put it to the test
 * Finally, the function should call feedAndMultiply, and pass it both _zombieId and kittyDna.
 
 ```
-// Modify function definition here:
 function feedAndMultiply(uint _zombieId, uint _targetDna, string memory _species) public {
     require(msg.sender == zombieToOwner[_zombieId]);
     Zombie storage myZombie = zombies[_zombieId];
@@ -589,7 +588,6 @@ function feedAndMultiply(uint _zombieId, uint _targetDna, string memory _species
 function feedOnKitty(uint _zombieId, uint _kittyId) public {
     uint kittyDna;
     (,,,,,,,,,kittyDna) = kittyContract.getKitty(_kittyId);
-    // And modify function call here:
     feedAndMultiply(_zombieId, kittyDna, "kitty");
 }
 ```

@@ -158,7 +158,8 @@ Remember that state variables are stored permanently in the blockchain? So creat
 Public Arrays
 You can declare an array as public, and Solidity will automatically create a getter method for it. The syntax looks like:
 
-```Person[] public people;
+```
+Person[] public people;
 ```
 Other contracts would then be able to read from, but not write to, this array. So this is a useful pattern for storing public data in your contract.
 
@@ -294,6 +295,8 @@ The above function doesn't actually change state in Solidity — e.g. it doesn't
 So in this case we could declare it as a view function, meaning it's only viewing the data but not modifying it:
 ```
 function sayHello() public view returns (string memory) {
+  return greeting;
+}
 Solidity also contains pure functions, which means you're not even accessing any data in the app. Consider the following:
 
 function _multiply(uint a, uint b) private pure returns (uint) {

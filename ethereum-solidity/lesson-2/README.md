@@ -306,4 +306,335 @@ function feedAndMultiply(uint _zombieId, uint _targetDna) public {
 }
 ```
 
+## Chapter 9: More on Function Visibility
+The code in our previous lesson has a mistake!
+
+If you try compiling it, the compiler will throw an error.
+
+The issue is we tried calling the _createZombie function from within ZombieFeeding, but _createZombie is a private function inside ZombieFactory. This means none of the contracts that inherit from ZombieFactory can access it.
+
+* Internal and External
+In addition to public and private, Solidity has two more types of visibility for functions: internal and external.
+
+internal is the same as private, except that it's also accessible to contracts that inherit from this contract. (Hey, that sounds like what we want here!).
+
+external is similar to public, except that these functions can ONLY be called outside the contract — they can't be called by other functions inside that contract. We'll talk about why you might want to use external vs public later.
+
+For declaring internal or external functions, the syntax is the same as private and public:
+```
+contract Sandwich {
+  uint private sandwichesEaten = 0;
+
+  function eat() internal {
+    sandwichesEaten++;
+  }
+}
+
+contract BLT is Sandwich {
+  uint private baconSandwichesEaten = 0;
+
+  function eatWithBacon() public returns (string memory) {
+    baconSandwichesEaten++;
+    // We can call this here because it's internal
+    eat();
+  }
+}
+```
+Put it to the test
+* Change _createZombie() from private to internal so our other contract can access it.
+
+* We've already focused you back to the proper tab, zombiefactory.sol.
+
+```
+function _createZombie(string memory _name, uint _dna) internal {
+        uint id = zombies.push(Zombie(_name, _dna)) - 1;
+        zombieToOwner[id] = msg.sender;
+        ownerZombieCount[msg.sender]++;
+        emit NewZombie(id, _name, _dna);
+}
+```
+
+## Chapter 10: What Do Zombies Eat?
+It's time to feed our zombies! And what do zombies like to eat most?
+
+Well it just so happens that CryptoZombies love to eat...
+
+CryptoKitties! 😱😱😱
+
+(Yes, I'm serious 😆 )
+
+In order to do this we'll need to read the kittyDna from the CryptoKitties smart contract. We can do that because the CryptoKitties data is stored openly on the blockchain. Isn't the blockchain cool?!
+
+Don't worry — our game isn't actually going to hurt anyone's CryptoKitty. We're only reading the CryptoKitties data, we're not able to actually delete it 😉
+
+* Interacting with other contracts
+For our contract to talk to another contract on the blockchain that we don't own, first we need to define an interface.
+
+Let's look at a simple example. Say there was a contract on the blockchain that looked like this:
+```
+contract LuckyNumber {
+  mapping(address => uint) numbers;
+
+  function setNum(uint _num) public {
+    numbers[msg.sender] = _num;
+  }
+
+  function getNum(address _myAddress) public view returns (uint) {
+    return numbers[_myAddress];
+  }
+}
+```
+This would be a simple contract where anyone could store their lucky number, and it will be associated with their Ethereum address. Then anyone else could look up that person's lucky number using their address.
+
+Now let's say we had an external contract that wanted to read the data in this contract using the getNum function.
+
+First we'd have to define an interface of the LuckyNumber contract:
+```
+contract NumberInterface {
+  function getNum(address _myAddress) public view returns (uint);
+}
+```
+Notice that this looks like defining a contract, with a few differences. For one, we're only declaring the functions we want to interact with — in this case getNum — and we don't mention any of the other functions or state variables.
+
+Secondly, we're not defining the function bodies. Instead of curly braces ({ and }), we're simply ending the function declaration with a semi-colon (;).
+
+So it kind of looks like a contract skeleton. This is how the compiler knows it's an interface.
+
+By including this interface in our dapp's code our contract knows what the other contract's functions look like, how to call them, and what sort of response to expect.
+
+We'll get into actually calling the other contract's functions in the next lesson, but for now let's declare our interface for the CryptoKitties contract.
+
+Put it to the test
+We've looked up the CryptoKitties source code for you, and found a function called getKitty that returns all the kitty's data, including its "genes" (which is what our zombie game needs to form a new zombie!).
+
+The function looks like this:
+```
+function getKitty(uint256 _id) external view returns (
+    bool isGestating,
+    bool isReady,
+    uint256 cooldownIndex,
+    uint256 nextActionAt,
+    uint256 siringWithId,
+    uint256 birthTime,
+    uint256 matronId,
+    uint256 sireId,
+    uint256 generation,
+    uint256 genes
+) {
+    Kitty storage kit = kitties[_id];
+
+    // if this variable is 0 then it's not gestating
+    isGestating = (kit.siringWithId != 0);
+    isReady = (kit.cooldownEndBlock <= block.number);
+    cooldownIndex = uint256(kit.cooldownIndex);
+    nextActionAt = uint256(kit.cooldownEndBlock);
+    siringWithId = uint256(kit.siringWithId);
+    birthTime = uint256(kit.birthTime);
+    matronId = uint256(kit.matronId);
+    sireId = uint256(kit.sireId);
+    generation = uint256(kit.generation);
+    genes = kit.genes;
+}
+```
+The function looks a bit different than we're used to. You can see it returns... a bunch of different values. If you're coming from a programming language like Javascript, this is different — in Solidity you can return more than one value from a function.
+
+Now that we know what this function looks like, we can use it to create an interface:
+
+* Define an interface called KittyInterface. Remember, this looks just like creating a new contract — we use the contract keyword.
+
+* Inside the interface, define the function getKitty (which should be a copy/paste of the function above, but with a semi-colon after the returns statement, instead of everything inside the curly braces.
+
+```
+contract KittyInterface {
+    function getKitty(uint256 _id) external view returns (
+    bool isGestating,
+    bool isReady,
+    uint256 cooldownIndex,
+    uint256 nextActionAt,
+    uint256 siringWithId,
+    uint256 birthTime,
+    uint256 matronId,
+    uint256 sireId,
+    uint256 generation,
+    uint256 genes
+    );
+}
+```
+
+## Chapter 11: Using an Interface
+Continuing our previous example with NumberInterface, once we've defined the interface as:
+```
+contract NumberInterface {
+  function getNum(address _myAddress) public view returns (uint);
+}
+We can use it in a contract as follows:
+
+contract MyContract {
+  address NumberInterfaceAddress = 0xab38... 
+  // ^ The address of the FavoriteNumber contract on Ethereum
+  NumberInterface numberContract = NumberInterface(NumberInterfaceAddress);
+  // Now `numberContract` is pointing to the other contract
+
+  function someFunction() public {
+    // Now we can call `getNum` from that contract:
+    uint num = numberContract.getNum(msg.sender);
+    // ...and do something with `num` here
+  }
+}
+```
+In this way, your contract can interact with any other contract on the Ethereum blockchain, as long they expose those functions as public or external.
+
+Put it to the test
+* Let's set up our contract to read from the CryptoKitties smart contract!
+
+* I've saved the address of the CryptoKitties contract in the code for you, under a variable named ckAddress. In the next line, create a KittyInterface named kittyContract, and initialize it with ckAddress — just like we did with numberContract above.
+
+```
+address ckAddress = 0x06012c8cf97BEaD5deAe237070F9587f8E7A266d;
+KittyInterface kittyContract = KittyInterface(ckAddress);
+```
+
+## Chapter 12: Handling Multiple Return Values
+This getKitty function is the first example we've seen that returns multiple values. Let's look at how to handle them:
+```
+function multipleReturns() internal returns(uint a, uint b, uint c) {
+  return (1, 2, 3);
+}
+
+function processMultipleReturns() external {
+  uint a;
+  uint b;
+  uint c;
+  // This is how you do multiple assignment:
+  (a, b, c) = multipleReturns();
+}
+
+// Or if we only cared about one of the values:
+function getLastReturnValue() external {
+  uint c;
+  // We can just leave the other fields blank:
+  (,,c) = multipleReturns();
+}
+```
+Put it to the test
+* Time to interact with the CryptoKitties contract!
+
+* Let's make a function that gets the kitty genes from the contract:
+
+* Make a function called feedOnKitty. It will take 2 uint parameters, _zombieId and _kittyId, and should be a public function.
+
+* The function should first declare a uint named kittyDna.
+
+> Note: In our KittyInterface, genes is a uint256 — but if you remember back to lesson 1, uint is an alias for uint256 — they're the same thing.
+
+* The function should then call the kittyContract.getKitty function with _kittyId and store genes in kittyDna. Remember — getKitty returns a ton of variables. (10 to be exact — I'm nice, I counted them for you!). But all we care about is the last one, genes. Count your commas carefully!
+
+```
+function feedOnKitty(uint _zombieId, uint _kittyId) public {
+      uint kittyDna;
+      (,,,,,,,,,kittyDna) = kittyContract.getKitty(_kittyId);
+      feedAndMultiply(_zombieId, kittyDna);
+}
+```
+
+## Chapter 13: Bonus: Kitty Genes
+Our function logic is now complete... but let's add in one bonus feature.
+
+Let's make it so zombies made from kitties have some unique feature that shows they're cat-zombies.
+
+To do this, we can add some special kitty code in the zombie's DNA.
+
+If you recall from lesson 1, we're currently only using the first 12 digits of our 16 digit DNA to determine the zombie's appearance. So let's use the last 2 unused digits to handle "special" characteristics.
+
+We'll say that cat-zombies have 99 as their last two digits of DNA (since cats have 9 lives). So in our code, we'll say if a zombie comes from a cat, then set the last two digits of DNA to 99.
+
+If statements
+If statements in Solidity look just like javascript:
+```
+function eatBLT(string memory sandwich) public {
+  // Remember with strings, we have to compare their keccak256 hashes
+  // to check equality
+  if (keccak256(abi.encodePacked(sandwich)) == keccak256(abi.encodePacked("BLT"))) {
+    eat();
+  }
+}
+```
+Put it to the test
+* Let's implement cat genes in our zombie code.
+
+* First, let's change the function definition for feedAndMultiply so it takes a 3rd argument: a string named _species which we'll store in memory.
+
+* Next, after we calculate the new zombie's DNA, let's add an if statement comparing the keccak256 hashes of _species and the string "kitty". We can't directly pass strings to keccak256. Instead, we will pass abi.encodePacked(_species) as an argument on the left side and abi.encodePacked("kitty") as an argument on the right side.
+
+* Inside the if statement, we want to replace the last 2 digits of DNA with 99. One way to do this is using the logic: newDna = newDna - newDna % 100 + 99;.
+
+* Explanation: Assume newDna is 334455. Then newDna % 100 is 55, so newDna - newDna % 100 is 334400. Finally add 99 to get 334499.
+
+* Lastly, we need to change the function call inside feedOnKitty. When it calls feedAndMultiply, add the parameter "kitty" to the end.
+* Finally, the function should call feedAndMultiply, and pass it both _zombieId and kittyDna.
+
+```
+// Modify function definition here:
+function feedAndMultiply(uint _zombieId, uint _targetDna, string memory _species) public {
+    require(msg.sender == zombieToOwner[_zombieId]);
+    Zombie storage myZombie = zombies[_zombieId];
+    _targetDna = _targetDna % dnaModulus;
+    uint newDna = (myZombie.dna + _targetDna) / 2;
+    if (keccak256(abi.encodePacked(_species)) == keccak256(abi.encodePacked("kitty"))) {
+      newDna = newDna - newDna%100 + 99;
+    }
+    _createZombie("NoName", newDna);
+}
+
+function feedOnKitty(uint _zombieId, uint _kittyId) public {
+    uint kittyDna;
+    (,,,,,,,,,kittyDna) = kittyContract.getKitty(_kittyId);
+    // And modify function call here:
+    feedAndMultiply(_zombieId, kittyDna, "kitty");
+}
+```
+
+## Chapter 14: Wrapping It Up
+That's it, you've completed lesson 2!
+
+You can check out the demo to the right to see it in action. Go ahead, I know you can't wait until the bottom of this page 😉. Click a kitty to attack, and see the new kitty zombie you get!
+
+Javascript implementation
+Once we're ready to deploy this contract to Ethereum we'll just compile and deploy ZombieFeeding — since this contract is our final contract that inherits from ZombieFactory, and has access to all the public methods in both contracts.
+
+Let's look at an example of interacting with our deployed contract using Javascript and web3.js:
+```
+var abi = /* abi generated by the compiler */
+var ZombieFeedingContract = web3.eth.contract(abi)
+var contractAddress = /* our contract address on Ethereum after deploying */
+var ZombieFeeding = ZombieFeedingContract.at(contractAddress)
+
+// Assuming we have our zombie's ID and the kitty ID we want to attack
+let zombieId = 1;
+let kittyId = 1;
+
+// To get the CryptoKitty's image, we need to query their web API. This
+// information isn't stored on the blockchain, just their webserver.
+// If everything was stored on a blockchain, we wouldn't have to worry
+// about the server going down, them changing their API, or the company 
+// blocking us from loading their assets if they don't like our zombie game ;)
+let apiUrl = "https://api.cryptokitties.co/kitties/" + kittyId
+$.get(apiUrl, function(data) {
+  let imgUrl = data.image_url
+  // do something to display the image
+})
+
+// When the user clicks on a kitty:
+$(".kittyImage").click(function(e) {
+  // Call our contract's `feedOnKitty` method
+  ZombieFeeding.feedOnKitty(zombieId, kittyId)
+})
+
+// Listen for a NewZombie event from our contract so we can display it:
+ZombieFactory.NewZombie(function(error, result) {
+  if (error) return
+  // This function will display the zombie, like in lesson 1:
+  generateZombie(result.zombieId, result.name, result.dna)
+})
+```
 

@@ -1,4 +1,4 @@
-## CRYTPO-ZOMBIE 
+## CRYPTO-ZOMBIE 
 >> Game built on Ethereum 
 
 ## Chapter 1: Immutability of Contracts

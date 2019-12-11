@@ -380,7 +380,353 @@ We can use these time units for our Zombie cooldown feature.
 now + cooldownTime will equal the current unix timestamp (in seconds) plus the number of seconds in 1 day — which will equal the unix timestamp 1 day from now. Later we can compare to see if this zombie's readyTime is greater than now to see if enough time has passed to use the zombie again.
 
 ```
+uint cooldownTime = 1 days;
 
+function _createZombie(string memory _name, uint _dna) internal {
+        uint id = zombies.push(Zombie(_name, _dna, 1, uint32(now + cooldownTime))) - 1;
+        zombieToOwner[id] = msg.sender;
+        ownerZombieCount[msg.sender]++;
+        emit NewZombie(id, _name, _dna);
+}
 ```
 
-We'll implement the functionality to limit actions based on readyTime in the next chapter.
+## Chapter 6: Zombie Cooldowns
+Now that we have a readyTime property on our Zombie struct, let's jump to zombiefeeding.sol and implement a cooldown timer.
+
+We're going to modify our feedAndMultiply such that:
+
+Feeding triggers a zombie's cooldown, and
+
+Zombies can't feed on kitties until their cooldown period has passed
+
+This will make it so zombies can't just feed on unlimited kitties and multiply all day. In the future when we add battle functionality, we'll make it so attacking other zombies also relies on the cooldown.
+
+First, we're going to define some helper functions that let us set and check a zombie's readyTime.
+
+### Passing structs as arguments
+You can pass a storage pointer to a struct as an argument to a private or internal function. This is useful, for example, for passing around our Zombie structs between functions.
+
+The syntax looks like this:
+```
+function _doStuff(Zombie storage _zombie) internal {
+  // do stuff with _zombie
+}
+```
+This way we can pass a reference to our zombie into a function instead of passing in a zombie ID and looking it up.
+
+### Put it to the test
+* Start by defining a _triggerCooldown function. It will take 1 argument, _zombie, a Zombie storage pointer. The function should be internal.
+
+* The function body should set _zombie.readyTime to uint32(now + cooldownTime).
+
+* Next, create a function called _isReady. This function will also take a Zombie storage argument named _zombie. It will be an internal view function, and return a bool.
+
+* The function body should return (_zombie.readyTime <= now), which will evaluate to either true or false. This function will tell us if enough time has passed since the last time the zombie fed.
+
+```
+function _triggerCooldown(Zombie storage _zombie) internal {
+    _zombie.readyTime = uint32(now + cooldownTime);
+}
+
+function _isReady(Zombie storage _zombie) internal view returns(bool){
+    return (_zombie.readyTime <= now);
+}
+```
+
+## Chapter 7: Public Functions & Security
+Now let's modify feedAndMultiply to take our cooldown timer into account.
+
+Looking back at this function, you can see we made it public in the previous lesson. An important security practice is to examine all your public and external functions, and try to think of ways users might abuse them. Remember — unless these functions have a modifier like onlyOwner, any user can call them and pass them any data they want to.
+
+Re-examining this particular function, the user could call the function directly and pass in any _targetDna or _species they want to. This doesn't seem very game-like — we want them to follow our rules!
+
+On closer inspection, this function only needs to be called by feedOnKitty(), so the easiest way to prevent these exploits is to make it internal.
+
+### Put it to the test
+* Currently feedAndMultiply is a public function. Let's make it internal so that the contract is more secure. We don't want users to be able to call this function with any DNA they want.
+
+* Let's make feedAndMultiply take our cooldownTime into account. First, after we look up myZombie, let's add a require statement that checks _isReady() and passes myZombie to it. This way the user can only execute this function if a zombie's cooldown time is over.
+
+* At the end of the function let's call _triggerCooldown(myZombie) so that feeding triggers the zombie's cooldown time.
+```
+function feedAndMultiply(uint _zombieId, uint _targetDna, string memory _species) internal{
+    require(msg.sender == zombieToOwner[_zombieId]);
+    Zombie storage myZombie = zombies[_zombieId];
+    require(_isReady(myZombie));
+    _targetDna = _targetDna % dnaModulus;
+    uint newDna = (myZombie.dna + _targetDna) / 2;
+    if (keccak256(abi.encodePacked(_species)) == keccak256(abi.encodePacked("kitty"))) {
+      newDna = newDna - newDna % 100 + 99;
+    }
+    _createZombie("NoName", newDna);
+    _triggerCooldown(myZombie);
+}
+```
+
+## Chapter 8: More on Function Modifiers
+Great! Our zombie now has a functional cooldown timer.
+
+Next, we're going to add some additional helper methods. We've created a new file for you called zombiehelper.sol, which imports zombiefeeding.sol. This will help to keep our code organized.
+
+Let's make it so zombies gain special abilities after reaching a certain level. But in order to do that, first we'll need to learn a little bit more about function modifiers.
+
+### Function modifiers with arguments
+Previously we looked at the simple example of onlyOwner. But function modifiers can also take arguments. For example:
+```
+// A mapping to store a user's age:
+mapping (uint => uint) public age;
+
+// Modifier that requires this user to be older than a certain age:
+modifier olderThan(uint _age, uint _userId) {
+  require(age[_userId] >= _age);
+  _;
+}
+
+// Must be older than 16 to drive a car (in the US, at least).
+// We can call the `olderThan` modifier with arguments like so:
+function driveCar(uint _userId) public olderThan(16, _userId) {
+  // Some function logic
+}
+```
+You can see here that the olderThan modifier takes arguments just like a function does. And that the driveCar function passes its arguments to the modifier.
+
+Let's try making our own modifier that uses the zombie level property to restrict access to special abilities.
+
+### Put it to the test
+* In ZombieHelper, create a modifier called aboveLevel. It will take 2 arguments, _level (a uint) and _zombieId (also a uint).
+
+* The body should check to make sure zombies[_zombieId].level is greater than or equal to _level.
+
+* Remember to have the last line of the modifier call the rest of the function with _;.
+
+> Code for this will be saved in zombiehelper.sol
+
+```
+modifier aboveLevel(uint _level, uint _zombieId) {
+    require(zombies[_zombieId].level >= _level);
+    _;
+}
+```
+
+## Chapter 9: Zombie Modifiers
+Now let's use our aboveLevel modifier to create some functions.
+
+Our game will have some incentives for people to level up their zombies:
+
+For zombies level 2 and higher, users will be able to change their name.
+For zombies level 20 and higher, users will be able to give them custom DNA.
+We'll implement these functions below. Here's the example code from the previous lesson for reference:
+```
+// A mapping to store a user's age:
+mapping (uint => uint) public age;
+
+// Require that this user be older than a certain age:
+modifier olderThan(uint _age, uint _userId) {
+  require (age[_userId] >= _age);
+  _;
+}
+
+// Must be older than 16 to drive a car (in the US, at least)
+function driveCar(uint _userId) public olderThan(16, _userId) {
+  // Some function logic
+}
+```
+### Put it to the test
+* Create a function called changeName. It will take 2 arguments: _zombieId (a uint), and _newName (a string with the data location set to calldata ), and make it external. It should have the aboveLevel modifier, and should pass in 2 for the _level parameter. (Don't forget to also pass the _zombieId).
+> Note: calldata is somehow similar to memory, but it's only available to external functions.
+
+* In this function, first we need to verify that msg.sender is equal to zombieToOwner[_zombieId]. Use a require statement.
+
+* Then the function should set zombies[_zombieId].name equal to _newName.
+
+* Create another function named changeDna below changeName. Its definition and contents will be almost identical to changeName, except its second argument will be _newDna (a uint), and it should pass in 20 for the _level parameter on aboveLevel. And of course, it should set the zombie's dna to _newDna instead of setting the zombie's name.
+
+```
+function changeName(uint _zombieId, string calldata _newName) external aboveLevel(2, _zombieId) {
+    require(msg.sender == zombieToOwner[_zombieId]);
+    zombies[_zombieId].name = _newName;
+}
+
+function changeDna(uint _zombieId, uint _newDna) external aboveLevel(20, _zombieId) {
+    require(msg.sender == zombieToOwner[_zombieId]);
+    zombies[_zombieId].dna = _newDna;
+}
+```
+
+## Chapter 10: Saving Gas With 'View' Functions
+Awesome! Now we have some special abilities for higher-level zombies, to give our owners an incentive to level them up. We can add more of these later if we want to.
+
+Let's add one more function: our DApp needs a method to view a user's entire zombie army — let's call it getZombiesByOwner.
+
+This function will only need to read data from the blockchain, so we can make it a view function. Which brings us to an important topic when talking about gas optimization:
+
+* View functions don't cost gas
+* view functions don't cost any gas when they're called externally by a user.
+
+This is because view functions don't actually change anything on the blockchain – they only read the data. So marking a function with view tells web3.js that it only needs to query your local Ethereum node to run the function, and it doesn't actually have to create a transaction on the blockchain (which would need to be run on every single node, and cost gas).
+
+We'll cover setting up web3.js with your own node later. But for now the big takeaway is that you can optimize your DApp's gas usage for your users by using read-only external view functions wherever possible.
+
+> Note: If a view function is called internally from another function in the same contract that is not a view function, it will still cost gas. This is because the other function creates a transaction on Ethereum, and will still need to be verified from every node. So view functions are only free when they're called externally.
+
+### Put it to the test
+* We're going to implement a function that will return a user's entire zombie army. We can later call this function from web3.js if we want to display a user profile page with their entire army.
+
+* This function's logic is a bit complicated so it will take a few chapters to implement.
+
+* Create a new function named getZombiesByOwner. It will take one argument, an address named _owner.
+
+* Let's make it an external view function, so we can call it from web3.js without needing any gas.
+
+* The function should return a uint[] (an array of uint) as memory data location.
+
+```
+function getZombiesByOwner(address _owner) external view returns(uint[] memory){
+}
+```
+
+## Chapter 11: Storage is Expensive
+One of the more expensive operations in Solidity is using storage — particularly writes.
+
+This is because every time you write or change a piece of data, it’s written permanently to the blockchain. Forever! Thousands of nodes across the world need to store that data on their hard drives, and this amount of data keeps growing over time as the blockchain grows. So there's a cost to doing that.
+
+In order to keep costs down, you want to avoid writing data to storage except when absolutely necessary. Sometimes this involves seemingly inefficient programming logic — like rebuilding an array in memory every time a function is called instead of simply saving that array in a variable for quick lookups.
+
+In most programming languages, looping over large data sets is expensive. But in Solidity, this is way cheaper than using storage if it's in an external view function, since view functions don't cost your users any gas. (And gas costs your users real money!).
+
+We'll go over for loops in the next chapter, but first, let's go over how to declare arrays in memory.
+
+### Declaring arrays in memory
+You can use the memory keyword with arrays to create a new array inside a function without needing to write anything to storage. The array will only exist until the end of the function call, and this is a lot cheaper gas-wise than updating an array in storage — free if it's a view function called externally.
+
+Here's how to declare an array in memory:
+```
+function getArray() external pure returns(uint[] memory) {
+  // Instantiate a new array in memory with a length of 3
+  uint[] memory values = new uint[](3);
+
+  // Put some values to it
+  values[0] = 1;
+  values[1] = 2;
+  values[2] = 3;
+
+  return values;
+}
+```
+This is a trivial example just to show you the syntax, but in the next chapter we'll look at combining this with for loops for real use-cases.
+
+> Note: memory arrays must be created with a length argument (in this example, 3). They currently cannot be resized like storage arrays can with array.push(), although this may be changed in a future version of Solidity.
+
+### Put it to the test
+* In our getZombiesByOwner function, we want to return a uint[] array with all the zombies a particular user owns.
+
+* Declare a uint[] memory variable called result
+
+* Set it equal to a new uint array. The length of the array should be however many zombies this _owner owns, which we can look up from our mapping with: ownerZombieCount[_owner].
+
+```
+function getZombiesByOwner(address _owner) external view returns(uint[] memory) {
+    uint[] memory result = new uint[](ownerZombieCount[_owner]);
+    return result;
+}
+```
+
+## Chapter 12: For Loops
+In the previous chapter, we mentioned that sometimes you'll want to use a for loop to build the contents of an array in a function rather than simply saving that array to storage.
+
+Let's look at why.
+
+For our getZombiesByOwner function, a naive implementation would be to store a mapping of owners to zombie armies in the ZombieFactory contract:
+
+```
+mapping (address => uint[]) public ownerToZombies
+```
+Then every time we create a new zombie, we would simply use ownerToZombies[owner].push(zombieId) to add it to that owner's zombies array. And getZombiesByOwner would be a very straightforward function:
+```
+function getZombiesByOwner(address _owner) external view returns (uint[] memory) {
+  return ownerToZombies[_owner];
+}
+```
+The problem with this approach
+This approach is tempting for its simplicity. But let's look at what happens if we later add a function to transfer a zombie from one owner to another (which we'll definitely want to add in a later lesson!).
+
+That transfer function would need to:
+
+* Push the zombie to the new owner's ownerToZombies array,
+* Remove the zombie from the old owner's ownerToZombies array,
+* Shift every zombie in the older owner's array up one place to fill the hole, and then
+* Reduce the array length by 1.
+* Step 3 would be extremely expensive gas-wise, since we'd have to do a write for every zombie whose position we shifted. If an owner has 20 zombies and trades away the first one, we would have to do 19 writes to maintain the order of the array.
+
+Since writing to storage is one of the most expensive operations in Solidity, every call to this transfer function would be extremely expensive gas-wise. And worse, it would cost a different amount of gas each time it's called, depending on how many zombies the user has in their army and the index of the zombie being traded. So the user wouldn't know how much gas to send.
+
+> Note: Of course, we could just move the last zombie in the array to fill the missing slot and reduce the array length by one. But then we would change the ordering of our zombie army every time we made a trade.
+
+Since view functions don't cost gas when called externally, we can simply use a for-loop in getZombiesByOwner to iterate the entire zombies array and build an array of the zombies that belong to this specific owner. Then our transfer function will be much cheaper, since we don't need to reorder any arrays in storage, and somewhat counter-intuitively this approach is cheaper overall.
+
+### Using for loops
+The syntax of for loops in Solidity is similar to JavaScript.
+
+Let's look at an example where we want to make an array of even numbers:
+```
+function getEvens() pure external returns(uint[] memory) {
+  uint[] memory evens = new uint[](5);
+  // Keep track of the index in the new array:
+  uint counter = 0;
+  // Iterate 1 through 10 with a for loop:
+  for (uint i = 1; i <= 10; i++) {
+    // If `i` is even...
+    if (i % 2 == 0) {
+      // Add it to our array
+      evens[counter] = i;
+      // Increment counter to the next empty index in `evens`:
+      counter++;
+    }
+  }
+  return evens;
+}
+```
+This function will return an array with the contents [2, 4, 6, 8, 10].
+
+### Put it to the test
+* Let's finish our getZombiesByOwner function by writing a for loop that iterates through all the zombies in our DApp, compares their owner to see if we have a match, and pushes them to our result array before returning it.
+
+* Declare a uint called counter and set it equal to 0. We'll use this variable to keep track of the index in our result array.
+
+* Declare a for loop that starts from uint i = 0 and goes up through i < zombies.length. This will iterate over every zombie in our array.
+
+* Inside the for loop, make an if statement that checks if zombieToOwner[i] is equal to _owner. This will compare the two addresses to see if we have a match.
+
+* Inside the if statement:
+
+	* Add the zombie's ID to our result array by setting result[counter] equal to i.
+	* Increment counter by 1 (see the for loop example above).
+That's it — the function will now return all the zombies owned by _owner without spending any gas.
+
+```
+function getZombiesByOwner(address _owner) external view returns(uint[] memory) {
+    uint[] memory result = new uint[](ownerZombieCount[_owner]);
+    uint counter = 0;
+    for(uint i=0; i < zombies.length; i++) {
+      if(zombieToOwner[i] == _owner) {
+        result[counter] = i;
+        counter++;
+      }
+    }
+    return result;
+}
+```
+
+## Chapter 13: Wrapping It Up
+Congratulations! That concludes Lesson 3.
+
+### Let's recap:
+We've added a way to update our CryptoKitties contracts
+We've learned to protect core functions with onlyOwner
+We've learned about gas and gas optimization
+We added levels and cooldowns to our zombies
+We now have functions to update a zombie's name and DNA once the zombie gets above a certain level
+And finally, we now have a function to return a user's zombie army
+
+
+

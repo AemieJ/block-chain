@@ -234,3 +234,184 @@ function attack(uint _zombieId, uint _targetId) external {
     
 }
 ```
+
+## Chapter 6: Refactoring Common Logic
+Whoever calls our attack function — we want to make sure the user actually owns the zombie they're attacking with. It would be a security concern if you could attack with someone else's zombie!
+
+Can you think of how we would add a check to see if the person calling this function is the owner of the _zombieId they're passing in?
+
+Give it some thought, and see if you can come up with the answer on your own.
+
+Take a moment... Refer to some of our previous lessons' code for ideas...
+
+Answer below, don't continue until you've given it some thought.
+
+### The answer
+We've done this check multiple times now in previous lessons. In changeName(), changeDna(), and feedAndMultiply(), we used the following check:
+```
+require(msg.sender == zombieToOwner[_zombieId]);
+This is the same logic we'll need for our attack function. Since we're using the same logic multiple times, let's move this into its own modifier to clean up our code and avoid repeating ourselves.
+```
+### Put it to the test
+* We're back to zombiefeeding.sol, since this is the first place we used that logic. Let's refactor it into its own modifier.
+
+* Create a modifier called ownerOf. It will take 1 argument, _zombieId (a uint).
+
+* The body should require that msg.sender is equal to zombieToOwner[_zombieId], then continue with the function. You can refer to zombiehelper.sol if you don't remember the syntax for a modifier.
+
+* Change the function definition of feedAndMultiply such that it uses the modifier ownerOf.
+
+* Now that we're using a modifier, you can remove the line require(msg.sender == zombieToOwner[_zombieId]);
+
+```
+modifier ownerOf {
+  require(msg.sender == zombieToOwner[_zombieId]);
+  _;
+}
+
+function feedAndMultiply(uint _zombieId, uint _targetDna, string memory _species) internal ownerOf(_zombieId) {
+    ...
+  }
+```
+
+## Chapter 7: More Refactoring
+We have a couple more places in zombiehelper.sol where we need to implement our new modifier ownerOf.
+
+### Put it to the test
+* Update changeName() to use ownerOf
+
+* Update changeDna() to use ownerOf
+
+```
+function changeName(uint _zombieId, string calldata _newName) external aboveLevel(2, _zombieId) ownerOf(_zombieId) {
+    zombies[_zombieId].name = _newName;
+}
+
+function changeDna(uint _zombieId, uint _newDna) external aboveLevel(20, _zombieId) ownerOf(_zombieId) {
+    zombies[_zombieId].dna = _newDna;
+}
+```
+
+## Chapter 8: Back to Attack!
+Enough refactoring — back to zombieattack.sol.
+
+We're going to continue defining our attack function, now that we have the ownerOf modifier to use.
+
+### Put it to the test
+* Add the ownerOf modifier to attack to make sure the caller owns _zombieId.
+
+* The first thing our function should do is get a storage pointer to both zombies so we can more easily interact with them:
+
+1. Declare a Zombie storage named myZombie, and set it equal to zombies[_zombieId].
+
+2. Declare a Zombie storage named enemyZombie, and set it equal to zombies[_targetId].
+
+* We're going to use a random number between 0 and 99 to determine the outcome of our battle. So declare a uint named rand, and set it equal to the result of the randMod function with 100 as an argument.
+
+```
+function attack(uint _zombieId, uint _targetId) external ownerOf(_zombieId) {
+    Zombie storage myZombie = zombies[_zombieId];
+    Zombie storage enemyZombie = zombies[_targetId];
+    uint rand = randMod(100);
+}
+```
+
+## Chapter 9: Zombie Wins and Losses
+For our zombie game, we're going to want to keep track of how many battles our zombies have won and lost. That way we can maintain a "zombie leaderboard" in our game state.
+
+We could store this data in a number of ways in our DApp — as individual mappings, as leaderboard Struct, or in the Zombie struct itself.
+
+Each has its own benefits and tradeoffs depending on how we intend on interacting with the data. In this tutorial, we're going to store the stats on our Zombie struct for simplicity, and call them winCount and lossCount.
+
+So let's jump back to zombiefactory.sol, and add these properties to our Zombie struct.
+
+### Put it to the test
+* Modify our Zombie struct to have 2 more properties:
+
+1. winCount, a uint16
+
+2. lossCount, also a uint16
+
+> Note: Remember, since we can pack uints inside structs, we want to use the smallest uints we can get away with. A uint8 is too small, since 2^8 = 256 — if our zombies attacked once per day, they could overflow this within a year. But 2^16 is 65536 — so unless a user wins or loses every day for 179 years straight, we should be safe here.
+
+* Now that we have new properties on our Zombie struct, we need to change our function definition in _createZombie().
+
+* Change the zombie creation definition so it creates each new zombie with 0 wins and 0 losses.
+
+```
+struct Zombie {
+      string name;
+      uint dna;
+      uint32 level;
+      uint32 readyTime;
+      uint16 winCount;
+      uint16 lossCount;
+}
+
+function _createZombie(string memory _name, uint _dna) internal {
+        uint id = zombies.push(Zombie(_name, _dna, 1, uint32(now + cooldownTime), 0, 0)) - 1;
+        zombieToOwner[id] = msg.sender;
+        ownerZombieCount[msg.sender]++;
+        emit NewZombie(id, _name, _dna);
+}
+```
+
+## Chapter 10: Zombie Victory 😄
+Now that we have a winCount and lossCount, we can update them depending on which zombie wins the fight.
+
+In chapter 6 we calculated a random number from 0 to 100. Now let's use that number to determine who wins the fight, and update our stats accordingly.
+
+### Put it to the test
+* Create an if statement that checks if rand is less than or equal to attackVictoryProbability.
+
+* If this condition is true, our zombie wins! So:
+
+1. Increment myZombie's winCount.
+
+2. Increment myZombie's level. (Level up!!!!!!!)
+
+3. Increment enemyZombie's lossCount. (Loser!!!!!! 😫 😫 😫)
+
+4. Run the feedAndMultiply function. Check zombiefeeding.sol to see the syntax for calling it. For the 3rd argument (_species), pass the string "zombie". (It doesn't actually do anything at the moment, but later we could add extra functionality for spawning zombie-based zombies if we wanted to).
+
+```
+if (rand <= attackVictoryProbability) {
+      myZombie.winCount++;
+      myZombie.level++;
+      enemyZombie.lossCount++;
+      feedAndMultiply(_zombieId, enemyZombie.dna, "zombie");
+}
+```
+
+## Chapter 11: Zombie Loss 😞
+Now that we've coded what happens when your zombie wins, let's figure out what happens when it loses.
+
+In our game, when zombies lose, they don't level down — they simply add a loss to their lossCount, and their cooldown is triggered so they have to wait a day before attacking again.
+
+To implement this logic, we'll need an else statement.
+
+else statements are written just like in JavaScript and many other languages:
+```
+if (zombieCoins[msg.sender] > 100000000) {
+  // You rich!!!
+} else {
+  // We require more ZombieCoins...
+}
+```
+### Put it to the test
+* Add an else statement. If our zombie loses:
+
+1. Increment myZombie's lossCount.
+
+2. Increment enemyZombie's winCount.
+
+3. Run the _triggerCooldown function on myZombie. This way the zombie can only attack once per day. (Remember, _triggerCooldown is already run inside feedAndMultiply. So the zombie's cooldown will be triggered whether he wins or loses.)
+
+```
+else {
+      myZombie.lossCount++;
+      enemyZombie.winCount++;
+      _triggerCooldown(myZombie);
+}
+```
+
